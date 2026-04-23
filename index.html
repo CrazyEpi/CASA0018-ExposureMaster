@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>B's 曝光辅助器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite/dist/tf-tflite.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; }
+        #video { width: 90%; max-width: 400px; border-radius: 10px; border: 5px solid #fff; }
+        #result { font-size: 24px; font-weight: bold; margin-top: 20px; padding: 15px; }
+        .normal { color: green; }
+        .warning { color: red; background: #ffebeb; border: 2px solid red; }
+    </style>
+</head>
+<body>
+    <h2>智能曝光辅助器 (AI)</h2>
+    <video id="video" autoplay playsinline></video>
+    <div id="result">正在加载模型...</div>
+
+    <script>
+        const video = document.getElementById('video');
+        const resultDiv = document.getElementById('result');
+        const labels = ['Under (太暗了)', 'Normal (完美！)', 'Over (太亮了)'];
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' }, // 默认开启后置摄像头
+                audio: false 
+            });
+            video.srcObject = stream;
+        }
+
+        async function runModel() {
+            // 1. 加载 TFLite 模型
+            const model = await tflite.loadTFLiteModel('./exposure_expert_v4.tflite');
+            resultDiv.innerText = "模型就绪，开始检测";
+
+            setInterval(async () => {
+                // 2. 将视频帧转为图片数据
+                const img = tf.browser.fromPixels(video);
+                // 3. 调整大小为 224x224 (这是你训练时的 IMG_SIZE)
+                const resized = tf.image.resizeBilinear(img, [224, 224]);
+                // 4. 归一化 (除以 255.0)
+                const input = resized.div(255.0).expandDims(0);
+
+                // 5. 进行预测
+                const prediction = await model.predict(input);
+                const scores = await prediction.data();
+                const maxScoreIndex = scores.indexOf(Math.max(...scores));
+
+                // 6. 更新 UI 界面
+                const label = labels[maxScoreIndex];
+                resultDiv.innerText = `检测结果: ${label}`;
+                
+                // 如果不是 Normal，显示红色警告
+                if (maxScoreIndex !== 1) {
+                    resultDiv.className = 'warning';
+                } else {
+                    resultDiv.className = 'normal';
+                }
+
+                // 清理内存
+                img.dispose(); resized.dispose(); input.dispose();
+            }, 500); // 每 0.5 秒预测一次
+        }
+
+        setupCamera().then(runModel);
+    </script>
+</body>
+</html>
