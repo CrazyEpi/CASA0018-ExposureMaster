@@ -7,6 +7,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img_lib;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart'; // Haptic actuator package
 
 late List<CameraDescription> _cameras;
 
@@ -61,7 +62,7 @@ class _PolaroidExposureAppState extends State<PolaroidExposureApp> {
 
   // Calculate the absolute EV100 for the Polaroid Baseline
   void _calculateBaselineEV() {
-    // EV = log2(N^2 / t) - log2(ISO / 100)
+    // Formula: EV = log2(N^2 / t) - log2(ISO / 100)
     double n = _apertureValues[3]; // f/8
     double t = _shutterValues[3];  // 1/30
     double iso = _isoValues[3].toDouble(); // 800
@@ -85,19 +86,19 @@ class _PolaroidExposureAppState extends State<PolaroidExposureApp> {
   }
 
   // --- Neural Network Initialization ---
-Future<void> _initializeNeuralNetwork() async {
+  Future<void> _initializeNeuralNetwork() async {
     try {
-      // 1. 将模型作为二进制流读取
+      // Extract model from assets to memory
       final rawAssetFile = await rootBundle.load('assets/exposure_expert_v4.tflite');
       final rawBytes = rawAssetFile.buffer.asUint8List();
       
-      // 2. 从内存创建 Interpreter
+      // Create interpreter from in-memory model buffer
       _interpreter = Interpreter.fromBuffer(rawBytes);
       
       setState(() => _result = "Model loaded. Awaiting capture.");
     } catch (e) {
       setState(() => _result = "Init Error: ${e.toString()}");
-      print("详细报错: $e");
+      print("Detailed Error: $e");
     }
   }
 
@@ -108,7 +109,7 @@ Future<void> _initializeNeuralNetwork() async {
     try {
       await _controller!.initialize();
       await _controller!.setExposureMode(ExposureMode.locked);
-      _applyExposureShift(); // Apply baseline offset
+      _applyExposureShift(); // Apply baseline offset upon startup
       if (mounted) {
         setState(() => _isCameraReady = true);
       }
@@ -125,16 +126,30 @@ Future<void> _initializeNeuralNetwork() async {
     double t = _shutterValues[_shutterIdx];
     double iso = _isoValues[_isoIdx].toDouble();
 
-    // Calculate current simulated EV
+    // Calculate simulated EV for the selected settings
     double currentEV = (log(n * n / t) / ln2) - (log(iso / 100) / ln2);
     
-    // EV diff: If current EV is lower (brighter setting), offset must be positive
+    // EV Difference: If settings are brighter, offset must shift to balance
     double shift = _baselineEV - currentEV; 
     
-    // Clamp to hardware limits (usually -2.0 to 2.0 on iOS/Android)
+    // Clamp to hardware-supported offset limits
     _currentEVOffset = shift.clamp(-2.0, 2.0);
     
     await _controller!.setExposureOffset(_currentEVOffset);
+  }
+
+  // --- Haptic Feedback Actuator ---
+  void _triggerHapticFeedback(int resultIndex) async {
+    bool? hasVibrator = await Vibration.hasVibrator();
+    if (hasVibrator != true) return;
+
+    if (resultIndex == 1) {
+      // Optimal Exposure: Single short pulse (Success)
+      Vibration.vibrate(duration: 100);
+    } else {
+      // Under/Over Exposure: Double heavy pulses (Warning)
+      Vibration.vibrate(pattern: [0, 200, 100, 200]);
+    }
   }
 
   // --- Inference Pipeline ---
@@ -163,17 +178,27 @@ Future<void> _initializeNeuralNetwork() async {
       _interpreter!.run(input, output);
 
       final labels = ['Under-exposed', 'Optimal Exposure', 'Over-exposed'];
-      int bestIdx = 0; double maxProb = -1.0;
+      int bestIdx = 0; 
+      double maxProb = -1.0;
       for (int i = 0; i < 3; i++) {
-        if (output[0][i] > maxProb) { maxProb = output[0][i]; bestIdx = i; }
+        if (output[0][i] > maxProb) { 
+          maxProb = output[0][i]; 
+          bestIdx = i; 
+        }
       }
+
+      // Trigger the physical actuator (Vibration)
+      _triggerHapticFeedback(bestIdx);
 
       setState(() {
         _result = "${labels[bestIdx]} (${(maxProb * 100).toStringAsFixed(1)}%)";
         _isAnalyzing = false;
       });
     } catch (e) {
-      setState(() { _result = "Error during analysis: ${e.toString()}"; _isAnalyzing = false; });
+      setState(() { 
+        _result = "Inference Error: ${e.toString()}"; 
+        _isAnalyzing = false; 
+      });
     }
   }
 
@@ -238,7 +263,10 @@ Future<void> _initializeNeuralNetwork() async {
                       ),
                     ),
                     if (_isAnalyzing) 
-                      Container(color: Colors.black45, child: Center(child: CircularProgressIndicator())),
+                      Container(
+                        color: Colors.black45, 
+                        child: Center(child: CircularProgressIndicator())
+                      ),
                   ],
                 ),
               ),
@@ -256,10 +284,13 @@ Future<void> _initializeNeuralNetwork() async {
                   style: TextStyle(fontSize: 16, color: Colors.yellow)
                 ),
                 SizedBox(height: 4),
-                Text("Simulated EV Shift: ${_currentEVOffset.toStringAsFixed(1)}", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  "Simulated EV Shift: ${_currentEVOffset.toStringAsFixed(1)}", 
+                  style: TextStyle(fontSize: 12, color: Colors.grey)
+                ),
                 Divider(),
                 
-                // Exposure Triangle Wheels
+                // Exposure Triangle Pickers
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
