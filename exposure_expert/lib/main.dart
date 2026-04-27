@@ -240,7 +240,7 @@ class _PolaroidExposureAppState extends State<PolaroidExposureApp> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text("Polaroid Exposure Assistant")),
+      appBar: AppBar(title: Text("Exposure Expert")),
       body: Column(
         children: [
           Expanded(
