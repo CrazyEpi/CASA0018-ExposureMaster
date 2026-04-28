@@ -4,7 +4,7 @@ dataset (20GB): https://drive.google.com/drive/folders/1Zc16SMJb0zgco7fLR3mlmqkd
 
 Exposure Expert is a mobile-based computer vision system designed to provide real-time exposure guidance for analog photography. By utilizing a fine-tuned MobileNetV2 architecture, the system performs local inference on ambient lighting conditions to predict optimal Exposure Values (EV), mitigating film waste through haptic and visual feedback.
 
-## Technical Architecture
+## Architecture
 
 ### 1. Data Engineering and Simulation Pipeline
 The model was trained on a composite dataset of 8,407 images, utilizing three distinct sources to ensure environmental and lighting diversity.
@@ -26,6 +26,7 @@ The system utilizes **MobileNetV2** as the backbone for its efficient use of inv
 * **Class Imbalance:** Applied class weighting to the loss function to compensate for the higher frequency of "Normal" exposure samples.
 
 ### 3. Edge Deployment and Optimization
+<img width="411" height="863" alt="QQ_1777295465714" src="https://github.com/user-attachments/assets/a0572cc4-8d5e-4471-bef7-e6334d183e48" />
 The inference engine is integrated into a Flutter-based mobile application, focusing on low-latency execution.
 
 * **Quantization:** The TensorFlow Lite model underwent weight quantization, reducing the binary footprint to ~4MB and significantly decreasing CPU cycles per inference.
@@ -36,10 +37,12 @@ The inference engine is integrated into a Flutter-based mobile application, focu
 
 ## Performance Evaluation
 
-### Accuracy Metrics
+### Accuracy and Loss Curve
+<img width="1400" height="500" alt="curve (TranAcc0 7825 ValAcc0 7914)" src="https://github.com/user-attachments/assets/aca89699-d2ae-4c76-a922-1085cf8a43ed" />
 The model achieved a final validation accuracy of **79.1%**. A notable observation during training was that validation accuracy consistently tracked higher than training accuracy, indicating that the augmentation and dropout layers successfully generalized the model's predictive capabilities.
 
 ### Confusion Matrix Analysis
+<img width="800" height="600" alt="confusionMatrix" src="https://github.com/user-attachments/assets/577eb952-c0b3-401c-8313-1f17c6097823" />
 Experimental results on the test set indicate:
 * **Zero Fatal Errors:** The model never misclassifies extreme underexposure as overexposure or vice-versa.
 * **Bias Optimization:** Misclassifications typically skew toward "Overexposed" rather than "Underexposed." In the context of film chemistry (specifically C-41 or instant film), this bias is beneficial as film maintains higher latitude in highlights than in shadows.
